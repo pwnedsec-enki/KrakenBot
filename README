@@ -1,0 +1,148 @@
+````markdown
+# Hashcat Discord Bot with Hashtopolis Integration
+
+A Discord bot that submits hash cracking jobs to a Hashtopolis server, manages distributed cracking across remote agents, and reports cracked passwords back to users.
+
+---
+
+## Features
+
+- Submit single hash cracking jobs via Discord commands
+- Integration with Hashtopolis API for distributed cracking
+- Trusted user role management in Discord
+- Async job queue with concurrency control
+- Dynamic onboarding instructions for Hashtopolis agents
+- Input validation for supported hash algorithms
+- Graceful handling of API errors and retries
+
+---
+
+## Prerequisites
+
+- Python 3.9+
+- Discord bot token and bot added to your server
+- Hashtopolis server set up and accessible
+- Hashtopolis user credentials with API access
+- Basic knowledge of running Python scripts and Discord bots
+
+---
+
+## Installation
+
+1. **Clone the repository**
+
+```bash
+git clone https://your-repo-url.git
+cd your-repo-url
+````
+
+2. **Create a virtual environment and activate it**
+
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+venv\Scripts\activate     # Windows
+```
+
+3. **Install dependencies**
+
+```bash
+pip install -r requirements.txt
+```
+
+*(Ensure `requirements.txt` includes `discord.py`, `aiohttp`, `python-dotenv`)*
+
+4. **Create a `.env` file in the root directory with the following:**
+
+```
+DISCORD_BOT_TOKEN=your_discord_token_here
+HASHTOPOLIS_URL=http://your.hashtopolis.server
+HASHTOPOLIS_USER=your_hashtopolis_username
+HASHTOPOLIS_PASSWORD=your_hashtopolis_password
+TRUSTED_ROLE_NAME=Trusted Agent
+```
+
+5. **Verify `templates/register_agent.txt` exists and contains onboarding instructions with placeholders:**
+
+```
+Hi {username},
+
+You can onboard your cracking agent with:
+
+Server URL: {server_url}
+Agent token: {agent_token}
+
+Instructions:
+...
+```
+
+---
+
+## Usage
+
+1. **Run the bot**
+
+```bash
+python main_bot.py
+```
+
+2. **Discord Commands**
+
+* `!register_agent`
+  Sends you onboarding instructions to add your machine as a cracking agent.
+
+* `!hashcat [algorithm] [hash]`
+  Submit a single hash to be cracked using the specified algorithm.
+  Example: `!hashcat md5 5d41402abc4b2a76b9719d911017c592`
+
+*Only users with the configured trusted role can run commands.*
+
+---
+
+## Supported Hash Algorithms
+
+The bot validates hashes against the following supported algorithms (see `config.py`):
+
+* md5
+* sha1
+* sha256
+* ntlm
+* bcrypt
+* and more (full list in `config.py`)
+
+---
+
+## Development
+
+* Modify or extend `hashcatbot.py` to add commands or features.
+* Use `hashtopolis_manager.py` as the API client for Hashtopolis.
+* Configure concurrency and queue settings inside the `JobProcessor` class.
+* Logs are output to console for monitoring.
+
+---
+
+## Troubleshooting
+
+* Check your `.env` for correct tokens and URLs.
+* Verify Hashtopolis server accessibility and API user permissions.
+* Ensure your Discord bot has the necessary intents and permissions.
+* Use logs to diagnose API errors or job processing issues.
+
+---
+
+## License
+
+Specify your license here.
+
+---
+
+## Acknowledgments
+
+* [Hashtopolis](https://github.com/s3inlc/hashtopolis) for the distributed cracking infrastructure.
+* [discord.py](https://discordpy.readthedocs.io/) for the Discord bot framework.
+
+---
+
+```
+```
+
