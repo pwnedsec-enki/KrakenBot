@@ -1,0 +1,21 @@
+Hi {username},
+
+You're now approved to contribute a cracking agent to our distributed network.
+
+To onboard your agent:
+
+1. Install the Hashtopolis agent:
+   https://github.com/s3inlc/hashtopolis/tree/master/agent
+
+2. Make sure you have Python 3.7+ installed.
+
+3. Run the agent with the following command:
+
+   python agent.py --server {server_url} --token {agent_token}
+
+This token is one-time use only and will automatically register your machine as a new agent.
+
+Once the agent appears in the Hashtopolis web UI, an admin will activate it.
+
+Thanks for supporting the cracking grid.
+
