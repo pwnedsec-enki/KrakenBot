@@ -1,165 +1,112 @@
+import aiohttp
 import asyncio
 import logging
-from discord.ext import commands
-from config import (
-    SUPPORTED_ALGORITHMS,
-    HASH_PATTERNS,
-    TRUSTED_ROLE_NAME,
-    HASHTOPOLIS_URL,
-    HASHTOPOLIS_USER,
-    HASHTOPOLIS_PASSWORD,
-)
-from hashtopolis_manager import HashtopolisManager
-from main_bot import JobManager, trusted_only, validate_hash_input, HashValidationError  # Import shared utilities
 
-class JobProcessor:
-    def __init__(self, bot, job_manager, hashtopolis, concurrency=2):
-        self.bot = bot
-        self.job_manager = job_manager
-        self.hashtopolis = hashtopolis
-        self.queue = asyncio.Queue()
-        self.semaphore = asyncio.Semaphore(concurrency)
-        self.running = False
+class HashtopolisAPIError(Exception):
+    pass
 
-    async def start(self):
-        if not self.running:
-            self.running = True
-            asyncio.create_task(self.worker())
+class HashtopolisManager:
+    def __init__(self, server_url, username, password, max_retries=3, backoff_factor=1.0):
+        self.server_url = server_url.rstrip('/')
+        self.username = username
+        self.password = password
+        self.token = None
+        self.session = None
+        self.max_retries = max_retries
+        self.backoff_factor = backoff_factor
 
-    async def enqueue_job(self, ctx, algorithm, hash_value):
-        await self.queue.put((ctx, algorithm, hash_value))
+    async def login(self):
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
 
-    async def worker(self):
-        while self.running:
-            ctx, algorithm, hash_value = await self.queue.get()
-            async with self.semaphore:
-                try:
-                    await self.process_job(ctx, algorithm, hash_value)
-                except Exception as e:
-                    logging.error(f"Error processing job for user {ctx.author.id}: {e}")
-                    await ctx.send(f"Error processing job: {e}")
-                finally:
-                    self.queue.task_done()
+        login_url = f"{self.server_url}/api/login"
+        data = {"user": self.username, "pass": self.password}
 
-    async def process_job(self, ctx, algorithm, hash_value):
-        if self.job_manager.has_active_job(ctx.author.id, hash_value):
-            await ctx.send("You already have this hash cracking in progress. Please wait.")
-            return
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                async with self.session.post(login_url, json=data) as resp:
+                    if resp.status != 200:
+                        logging.warning(f"Login attempt {attempt} failed with HTTP {resp.status}")
+                        await self._sleep_backoff(attempt)
+                        continue
+                    json_resp = await resp.json()
+                    if json_resp.get("success"):
+                        self.token = json_resp.get("token")
+                        logging.info("Logged in to Hashtopolis API successfully")
+                        return True
+                    else:
+                        raise HashtopolisAPIError(f"Login failed: {json_resp.get('error')}")
+            except Exception as e:
+                logging.warning(f"Login attempt {attempt} exception: {e}")
+                await self._sleep_backoff(attempt)
 
-        self.job_manager.add_job(ctx.author.id, hash_value)
-        await ctx.send(f"Starting cracking job for your hash with algorithm {algorithm}...")
+        raise HashtopolisAPIError("Exceeded max login retries")
 
-        # Step 1: Create hashlist
-        hashlist_resp = await self.hashtopolis.create_hashlist(
-            f"discord-{ctx.author.id}-{algorithm}", SUPPORTED_ALGORITHMS[algorithm]
-        )
-        if not hashlist_resp or not hashlist_resp.get("success"):
-            await ctx.send("Failed to create hashlist.")
-            self.job_manager.remove_job(ctx.author.id, hash_value)
-            return
-        hashlist_id = hashlist_resp.get("hashlist_id")
+    async def _sleep_backoff(self, attempt):
+        delay = self.backoff_factor * (2 ** (attempt - 1))
+        logging.info(f"Retrying after {delay:.1f} seconds...")
+        await asyncio.sleep(delay)
 
-        # Step 2: Upload hash
-        upload_resp = await self.hashtopolis.upload_hashes(hashlist_id, [hash_value])
-        if not upload_resp or not upload_resp.get("success"):
-            await ctx.send("Failed to upload hash.")
-            self.job_manager.remove_job(ctx.author.id, hash_value)
-            return
+    async def _request(self, method, endpoint, payload=None, params=None):
+        if self.token is None:
+            await self.login()
 
-        # Step 3: Create task
-        task_resp = await self.hashtopolis.create_task(
-            f"discord-{ctx.author.id}-{algorithm}-task", hashlist_id, "rockyou.txt"
-        )
-        if not task_resp or not task_resp.get("success"):
-            await ctx.send("Failed to create cracking task.")
-            self.job_manager.remove_job(ctx.author.id, hash_value)
-            return
-        task_id = task_resp.get("task_id")
+        url = f"{self.server_url}/api/{endpoint}"
+        headers = {"Authorization": f"Bearer {self.token}"}
 
-        await ctx.send(f"Cracking task created with ID {task_id}. This may take some time.")
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                async with self.session.request(method, url, json=payload, params=params, headers=headers) as resp:
+                    if resp.status == 401:
+                        logging.info("Token expired or unauthorized, re-logging in")
+                        await self.login()
+                        continue
 
-        # Step 4: Poll status and wait for completion (poll every 10s up to 1 hour)
-        for _ in range(360):
-            await asyncio.sleep(10)
-            status_resp = await self.hashtopolis.get_task_status(task_id)
-            if not status_resp or not status_resp.get("success"):
-                continue
-            status = status_resp.get("status")
-            if status == "done":
-                cracked = await self.hashtopolis.get_cracked_hashes(task_id)
-                if cracked and cracked.get("success") and cracked.get("hashes"):
-                    password = cracked["hashes"][0].get("password", None)
-                    await ctx.send(f"Hash cracked! Password: `{password}`")
-                else:
-                    await ctx.send("Task completed but password was not found.")
-                break
-            elif status == "failed":
-                await ctx.send("Cracking task failed.")
-                break
-        else:
-            await ctx.send("Cracking task timed out after 1 hour.")
+                    if resp.status != 200:
+                        logging.warning(f"API {method} {endpoint} attempt {attempt} failed HTTP {resp.status}")
+                        await self._sleep_backoff(attempt)
+                        continue
 
-        self.job_manager.remove_job(ctx.author.id, hash_value)
+                    json_resp = await resp.json()
+                    if not json_resp.get("success", False):
+                        logging.warning(f"API {method} {endpoint} returned error: {json_resp.get('error')}")
+                    return json_resp
 
+            except aiohttp.ClientError as e:
+                logging.warning(f"API {method} {endpoint} attempt {attempt} exception: {e}")
+                await self._sleep_backoff(attempt)
 
-class HashcatBot(commands.Cog):
-    def __init__(self, bot, job_manager):
-        self.bot = bot
-        self.job_manager = job_manager
-        self.hashtopolis = HashtopolisManager(
-            HASHTOPOLIS_URL, HASHTOPOLIS_USER, HASHTOPOLIS_PASSWORD
-        )
-        self.job_processor = JobProcessor(bot, job_manager, self.hashtopolis)
-        self.bot.loop.create_task(self.hashtopolis.login())
-        self.bot.loop.create_task(self.job_processor.start())
+        raise HashtopolisAPIError(f"Failed API {method} {endpoint} after {self.max_retries} attempts")
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        logging.info(f"Bot logged in as {self.bot.user}")
+    async def create_hashlist(self, name, algorithm):
+        payload = {"name": name, "algorithm": algorithm}
+        return await self._request("POST", "hashlist/new", payload)
 
-    @commands.command(name="register_agent")
-    @trusted_only()
-    async def register_agent(self, ctx):
-        try:
-            with open("templates/register_agent.txt", "r") as f:
-                instructions = f.read()
-            # Replace placeholders dynamically
-            instructions = instructions.replace("{username}", ctx.author.name)
-            instructions = instructions.replace("{server_url}", HASHTOPOLIS_URL)
-            instructions = instructions.replace("{agent_token}", self.hashtopolis.password)
-        except Exception as e:
-            logging.error(f"Failed to load registration instructions: {e}")
-            fallback = (
-                f"Hi {ctx.author.name},\n\n"
-                "You're now approved to contribute a cracking agent.\n\n"
-                "1. Install requirements:\n"
-                "   pip install -r requirements.txt\n\n"
-                "2. Download the agent:\n"
-                "   https://github.com/s3inlc/hashtopolis/tree/master/agent\n\n"
-                f"3. Run the agent:\n"
-                f"   python agent.py --server {HASHTOPOLIS_URL} --token {self.hashtopolis.password}\n\n"
-                "Let an admin know once your agent appears in Hashtopolis so it can be activated."
-            )
-            await ctx.author.send(fallback)
-            await ctx.send("Template file not found. Sent fallback instructions via DM.")
-            return
+    async def upload_hashes(self, hashlist_id, hashes):
+        payload = {"hashlist_id": hashlist_id, "hashes": hashes}
+        return await self._request("POST", "hashlist/upload", payload)
 
-        await ctx.author.send(instructions)
-        await ctx.send("Registration instructions sent via DM.")
+    async def create_task(self, name, hashlist_id, wordlist, rules=None):
+        payload = {
+            "name": name,
+            "hashlist_id": hashlist_id,
+            "wordlist": wordlist,
+            "rules": rules or "",
+        }
+        return await self._request("POST", "task/new", payload)
 
-    @commands.command(name="hashcat")
-    @trusted_only()
-    async def hashcat(self, ctx, algorithm: str = None, hash_value: str = None):
-        if not algorithm or not hash_value:
-            await ctx.send("Usage: !hashcat [algorithm] [hash_value]")
-            return
+    async def get_task_status(self, task_id):
+        return await self._request("GET", f"task/status/{task_id}")
 
-        try:
-            validate_hash_input(algorithm, hash_value)
-        except HashValidationError as e:
-            await ctx.send(str(e))
-            return
+    async def get_cracked_hashes(self, task_id):
+        return await self._request("GET", f"task/cracked/{task_id}")
 
-        await self.job_processor.enqueue_job(ctx, algorithm, hash_value)
-        await ctx.send("Your cracking job has been queued. You will be notified when it completes.")
+    async def generate_setup_token(self):
+        return await self._request("POST", "setup/generateAgentToken")
+
+    async def close(self):
+        if self.session:
+            await self.session.close()
+            self.session = None
+            logging.info("Hashtopolis HTTP session closed")
 

@@ -1,7 +1,6 @@
 import aiohttp
 import asyncio
 import logging
-import time
 
 class HashtopolisAPIError(Exception):
     pass
@@ -59,7 +58,6 @@ class HashtopolisManager:
             try:
                 async with self.session.request(method, url, json=payload, params=params, headers=headers) as resp:
                     if resp.status == 401:
-                        # Token expired or unauthorized - re-login and retry
                         logging.info("Token expired or unauthorized, re-logging in")
                         await self.login()
                         continue
@@ -72,7 +70,6 @@ class HashtopolisManager:
                     json_resp = await resp.json()
                     if not json_resp.get("success", False):
                         logging.warning(f"API {method} {endpoint} returned error: {json_resp.get('error')}")
-                        # Optionally raise or handle error codes here
                     return json_resp
 
             except aiohttp.ClientError as e:
@@ -86,7 +83,6 @@ class HashtopolisManager:
         return await self._request("POST", "hashlist/new", payload)
 
     async def upload_hashes(self, hashlist_id, hashes):
-        # hashes should be a list of strings
         payload = {"hashlist_id": hashlist_id, "hashes": hashes}
         return await self._request("POST", "hashlist/upload", payload)
 
@@ -104,6 +100,9 @@ class HashtopolisManager:
 
     async def get_cracked_hashes(self, task_id):
         return await self._request("GET", f"task/cracked/{task_id}")
+
+    async def generate_setup_token(self):
+        return await self._request("POST", "setup/generateAgentToken")
 
     async def close(self):
         if self.session:
