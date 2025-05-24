@@ -1,5 +1,5 @@
 ````markdown
-# Hashcat Discord Bot with Hashtopolis Integration
+# Introducing Kraken.. A Hashcat Discord Bot with Hashtopolis Integration
 
 A Discord bot that submits hash cracking jobs to a Hashtopolis server, manages distributed cracking across remote agents, and reports cracked passwords back to users.
 
@@ -32,8 +32,8 @@ A Discord bot that submits hash cracking jobs to a Hashtopolis server, manages d
 1. **Clone the repository**
 
 ```bash
-git clone https://your-repo-url.git
-cd your-repo-url
+git clone https://github.com/pwnedsec-enki/KrakenBot.git
+cd KrakenBot
 ````
 
 2. **Create a virtual environment and activate it**
@@ -50,9 +50,7 @@ venv\Scripts\activate     # Windows
 pip install -r requirements.txt
 ```
 
-*(Ensure `requirements.txt` includes `discord.py`, `aiohttp`, `python-dotenv`)*
-
-4. **Create a `.env` file in the root directory with the following:**
+4. **Edit a `.env` file in the root directory with the following:**
 
 ```
 DISCORD_BOT_TOKEN=your_discord_token_here
@@ -61,22 +59,6 @@ HASHTOPOLIS_USER=your_hashtopolis_username
 HASHTOPOLIS_PASSWORD=your_hashtopolis_password
 TRUSTED_ROLE_NAME=Trusted Agent
 ```
-
-5. **Verify `templates/register_agent.txt` exists and contains onboarding instructions with placeholders:**
-
-```
-Hi {username},
-
-You can onboard your cracking agent with:
-
-Server URL: {server_url}
-Agent token: {agent_token}
-
-Instructions:
-...
-```
-
----
 
 ## Usage
 
