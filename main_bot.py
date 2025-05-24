@@ -1,37 +1,23 @@
+import asyncio
+import logging
 import discord
 from discord.ext import commands
-import logging
-import sys
 from config import DISCORD_TOKEN
-from hashcatbot import HashcatBot, JobManager  # Import the cog and JobManager
 
-logging.basicConfig(level=logging.INFO)
+intents = discord.Intents.default()
+intents.message_content = True
+intents.messages = True
 
-INTENTS = discord.Intents.default()
-INTENTS.messages = True
-INTENTS.message_content = True
-
-bot = commands.Bot(command_prefix="!", intents=INTENTS)
-
-# Create the shared job manager instance
-job_manager = JobManager()
-
-# Instantiate the HashcatBot cog with the bot and job manager
-hashcat_bot = HashcatBot(bot, job_manager)
-bot.add_cog(hashcat_bot)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
     logging.info(f"Bot logged in as {bot.user}")
 
-@bot.event
-async def on_close():
-    # Graceful shutdown: close Hashtopolis session if needed
-    await hashcat_bot.hashtopolis.close()
+async def main():
+    await bot.load_extension("hashcatbot")
+    await bot.start(DISCORD_TOKEN)
 
 if __name__ == "__main__":
-    if not DISCORD_TOKEN:
-        logging.error("DISCORD_BOT_TOKEN is not set. Exiting.")
-        sys.exit(1)
-    bot.run(DISCORD_TOKEN)
-
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(main())
