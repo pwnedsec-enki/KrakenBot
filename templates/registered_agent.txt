@@ -1,21 +1,43 @@
 Hi {username},
 
-You're now approved to contribute a cracking agent to our distributed network.
+You’re now approved to join our Hashtopolis cracking network! Follow these steps to get your agent up and running:
 
-To onboard your agent:
+1. **Install Python 3.7+**
+   Verify you have at least Python 3.7:
+     ```bash
+     python3 --version
+     ```
+   If not installed, on Debian/Ubuntu run:
+     ```bash
+     sudo apt update
+     sudo apt install python3 python3-venv python3-pip
+     ```
+   Then install the required libraries:
+     ```bash
+     pip3 install --user requests psutil
+     ```
 
-1. Install the Hashtopolis agent:
-   https://github.com/s3inlc/hashtopolis/tree/master/agent
+2. **Unpack & build the agent**
+   In the DM you’ve received a ZIP file. Run:
+     ```bash
+     unzip hashtopolis_agent.zip -d hashtopolis_agent
+     cd hashtopolis_agent
+     ./build.sh
+     ```
+   This will bundle everything into `hashtopolis.zip`.
 
-2. Make sure you have Python 3.7+ installed.
+3. **Start the agent**
+   Once you have your hashtopolis.zip, run the following to register your device:
+     ```bash
+     python3 hashtopolis.zip \
+       --url http://yourhashtopolishostnamehere:8080/api/server.php \
+       --token "{agent_token}"
+     ```
+   This will register your machine and begin pulling work.
 
-3. Run the agent with the following command:
+---
 
-   python agent.py --server {server_url} --token {agent_token}
+Once your agent shows up in the Hashtopolis web UI, an admin will activate it and your contributions will start cracking. If you run into any issues, just reply here or reach out to an admin.
 
-This token is one-time use only and will automatically register your machine as a new agent.
-
-Once the agent appears in the Hashtopolis web UI, an admin will activate it.
-
-Thanks for supporting the cracking grid.
-
+Thank you for supporting our distributed cracking grid!
+– The Hashtopolis Bot
